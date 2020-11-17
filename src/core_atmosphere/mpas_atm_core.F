@@ -92,16 +92,18 @@ module atm_core
       if (config_do_restart) then
          call MPAS_stream_mgr_read(domain % streamManager, streamID='restart', ierr=ierr)
       else
+         call MPAS_stream_mgr_read(domain % streamManager, streamID='static', whence=MPAS_STREAM_NEAREST, ierr=ierr)
          call MPAS_stream_mgr_read(domain % streamManager, streamID='input', ierr=ierr)
       end if
+
       if (ierr /= MPAS_STREAM_MGR_NOERR) then
          call mpas_log_write('********************************************************************************', messageType=MPAS_LOG_ERR)
          call mpas_log_write('Error reading initial conditions',                                                 messageType=MPAS_LOG_ERR)
          call mpas_log_write('********************************************************************************', messageType=MPAS_LOG_CRIT)
       end if
+      call MPAS_stream_mgr_reset_alarms(domain % streamManager, streamID='static', direction=MPAS_STREAM_INPUT, ierr=ierr)
       call MPAS_stream_mgr_reset_alarms(domain % streamManager, streamID='input', direction=MPAS_STREAM_INPUT, ierr=ierr)
       call MPAS_stream_mgr_reset_alarms(domain % streamManager, streamID='restart', direction=MPAS_STREAM_INPUT, ierr=ierr)
-
       !
       ! Read all other inputs
       ! For now we don't do this here to match results with previous code; to match requires 
