@@ -41,7 +41,7 @@ module mpas_log
 
    use mpas_derived_types
    use mpas_abort, only : mpas_dmpar_global_abort
-   use mpas_io_units
+   use mpas_io_units, only : mpas_new_unit, mpas_release_unit
 
    implicit none
    private
@@ -176,13 +176,9 @@ module mpas_log
       mpas_log_info % taskID = domain % dminfo % my_proc_id
       mpas_log_info % nTasks = domain % dminfo % nprocs
 
-      ! Store the domain number and initialized_mpi
+      ! Store the domain number
       !   This will be used to number the log files
       mpas_log_info % domainID = domain % domainID
-      write(domainString, '(i4.4)') mpas_log_info % domainID
-
-      !   This will be used to decide whether to abort MPI
-      mpas_log_info % initialized_mpi = domain % dminfo % initialized_mpi
 
       ! Set log file to be active or not based on master/nonmaster task and optimized/debug build
       !   * Optimized build: Only master task log is active
@@ -215,12 +211,16 @@ module mpas_log
       else
          write(taskString, '(i9.9)') mpas_log_info % taskID
       end if
-      write(proposedLogFileName, fmt='(a, a, a, a, a)') "log.", trim(mpas_log_info % coreName), ".", trim(taskString), ".out"
-      write(proposedErrFileName, fmt='(a, a, a, a, a)') "log.", trim(mpas_log_info % coreName), ".", trim(taskString), ".err"
 
       if ( mpas_log_info % domainID > 0 ) then
-         write(proposedLogFileName, fmt='(a, a, a)') trim(proposedLogFileName),".d", trim(domainString)
-         write(proposedErrFileName, fmt='(a, a, a)') trim(proposedErrFileName),".d", trim(domainString)
+         write(domainString, '(i4.4)') mpas_log_info % domainID
+         write(proposedLogFileName, fmt='(a, a, a, a, a, a, a)') &
+                                    "log.", trim(mpas_log_info % coreName), ".", trim(taskString), ".d", trim(domainString), ".out"
+         write(proposedErrFileName, fmt='(a, a, a, a, a, a, a)') &
+                                    "log.", trim(mpas_log_info % coreName), ".", trim(taskString), ".d", trim(domainString), ".err"
+      else
+         write(proposedLogFileName, fmt='(a, a, a, a, a)') "log.", trim(mpas_log_info % coreName), ".", trim(taskString), ".out"
+         write(proposedErrFileName, fmt='(a, a, a, a, a)') "log.", trim(mpas_log_info % coreName), ".", trim(taskString), ".err"
       end if
 
       ! Set the log and err file names and unit numbers
@@ -284,9 +284,6 @@ module mpas_log
          mpas_log_info % outputLog % unitNum = unitNumber
          call mpas_new_unit(unitNumber)
          mpas_log_info % errorLog % unitNum = unitNumber
-         if ( unitNumber < 0 ) then
-            call mpas_dmpar_global_abort('ERROR: All file units are taken.  Change maxUnits in mpas_io_units.F')
-         end if
 
       endif
 
@@ -437,8 +434,7 @@ module mpas_log
          write(unitNumber, '(a,a,a,a,a,i7.1,a,i7.1)') 'Beginning MPAS-', trim(mpas_log_info % coreName), ' ', &
             trim(logTypeString), ' Log File for task ', mpas_log_info % taskID, ' of ', mpas_log_info % nTasks
          if ( mpas_log_info % domainID > 0 ) then
-            write(unitNumber, '(a,i7.1)') &
-               ' for domain number ',  mpas_log_info % domainID
+            write(unitNumber, '(a,i7.1)') '    for domain ID ',  mpas_log_info % domainID
          end if
          call date_and_time(date,time)
          write(unitNumber, '(a)') '    Opened at ' // date(1:4)//'/'//date(5:6)//'/'//date(7:8) // &
@@ -851,9 +847,7 @@ module mpas_log
       deallocate(mpas_log_info)
 
 #ifdef _MPI
-      if ( mpas_log_info % initialized_mpi ) then
-         call MPI_Abort(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
-      end if
+      call MPI_Abort(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
 #else
       stop
 #endif

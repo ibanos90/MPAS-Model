@@ -35,7 +35,6 @@ module mpas_subdriver
    use test_core_interface
 #endif
 
-   type (dm_info), pointer :: dminfo
 
    contains
 
@@ -51,8 +50,8 @@ module mpas_subdriver
  
       implicit none
 
-      type (core_type), intent(out), pointer :: corelist
-      type (domain_type), intent(out), pointer :: domain_ptr
+      type (core_type), intent(inout), pointer :: corelist
+      type (domain_type), intent(inout), pointer :: domain_ptr
       integer, intent(in), optional :: mpi_comm
 
       integer :: iArg, nArgs
@@ -83,7 +82,7 @@ module mpas_subdriver
       character(len=StrKIND) :: iotype
       logical :: streamsExists
       integer :: mesh_iotype
-      integer, save :: domainID = -1
+      integer, save :: domainID = 0
 
       interface
          subroutine xml_stream_parser(xmlname, mgr_p, comm, ierr) bind(c)
@@ -154,13 +153,13 @@ module mpas_subdriver
 
       call mpas_allocate_domain(domain_ptr)
 
-      domainID = domainID + 1
       domain_ptr % domainID = domainID
+      domainID = domainID + 1
 
       !
       ! Initialize infrastructure
       !
-      call mpas_framework_init_phase1(domain_ptr % dminfo, mpi_comm)
+      call mpas_framework_init_phase1(domain_ptr % dminfo, mpi_comm=mpi_comm)
 
 
 #ifdef CORE_ATMOSPHERE
@@ -345,11 +344,13 @@ module mpas_subdriver
 
 
    subroutine mpas_run(domain_ptr)
+
       use mpas_log, only: mpas_log_info
 
       implicit none
 
       type (domain_type), intent(inout), pointer :: domain_ptr
+
       integer :: iErr
 
       if ( associated(domain_ptr % logInfo) ) mpas_log_info => domain_ptr % logInfo

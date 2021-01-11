@@ -22,6 +22,7 @@ set(init_atm_core_srcs
         mpas_atmphys_functions.F
         mpas_atmphys_initialize_real.F
         mpas_atmphys_utilities.F
+        mpas_geotile_manager.F
         mpas_init_atm_bitarray.F
         mpas_init_atm_cases.F
         mpas_init_atm_core.F
@@ -34,6 +35,9 @@ set(init_atm_core_srcs
         mpas_init_atm_static.F
         mpas_init_atm_surface.F
         mpas_init_atm_vinterp.F
+        mpas_kd_tree.F
+        mpas_parse_geoindex.F
+        mpas_stack.F
         read_geogrid.c)
 
 add_library(core_init_atmosphere ${init_atm_core_srcs})
