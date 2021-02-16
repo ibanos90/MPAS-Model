@@ -17,11 +17,13 @@ if(MPAS_CORES MATCHES " ") #Convert strings separated with spaces to CMake list 
 endif()
 option(MPAS_DOUBLE_PRECISION "Use double precision 64-bit Floating point." TRUE)
 option(MPAS_PROFILE "Enable GPTL profiling" OFF)
+option(MPAS_OPENMP "Enable OpenMP" OFF)
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
 message(STATUS "[OPTION] MPAS_CORES: ${MPAS_CORES}")
 message(STATUS "[OPTION] MPAS_DOUBLE_PRECISION: ${MPAS_DOUBLE_PRECISION}")
 message(STATUS "[OPTION] MPAS_PROFILE: ${MPAS_PROFILE}")
+message(STATUS "[OPTION] MPAS_OPENMP: ${MPAS_OPENMP}")
 message(STATUS "[OPTION] BUILD_SHARED_LIBS: ${BUILD_SHARED_LIBS}")
 
 # Build product output locations
@@ -100,7 +102,9 @@ macro(mpas_fortran_target _tgt)
     target_compile_definitions(${_tgt} PRIVATE USE_PIO2=1)
 
     # Enable OpenMP support
-    target_link_libraries(${_tgt} PUBLIC OpenMP::OpenMP_Fortran)
+    if(MPAS_OPENMP)
+        target_link_libraries(${_tgt} PUBLIC OpenMP::OpenMP_Fortran)
+    endif()
 
     # Compiler-specific options and flags
     if(CMAKE_Fortran_COMPILER_ID MATCHES GNU)
