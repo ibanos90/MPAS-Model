@@ -22,6 +22,8 @@ add_library(esmf ${_esmf_time_src})
 mpas_fortran_target(esmf)
 add_library(MPAS::external::esmf ALIAS esmf)
 
+target_compile_definitions(esmf PRIVATE HIDE_MPI=1)
+
 target_include_directories(esmf PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 target_link_libraries(esmf PUBLIC MPI::MPI_Fortran)
