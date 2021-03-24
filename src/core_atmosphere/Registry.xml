@@ -443,10 +443,6 @@
 			<var name="fEdge"/>
 			<var name="fVertex"/>
 			<var name="meshDensity"/>
-			<var name="meshScalingDel2"/>
-			<var name="meshScalingDel4"/>
-			<var name="meshScalingRegionalCell"/>
-			<var name="meshScalingRegionalEdge"/>
 			<var name="bdyMaskCell"/>
 			<var name="bdyMaskEdge"/>
 			<var name="bdyMaskVertex"/>
@@ -472,8 +468,6 @@
 			<var name="defc_a"/>
 			<var name="defc_b"/>
 			<var name="coeffs_reconstruct"/>
-			<var name="east"/>
-			<var name="north"/>
 			<var name="var2d"/>
 			<var name="con"/>
 			<var name="oa1"/>
@@ -493,8 +487,6 @@
 			<var name="snoalb"/>
 			<var name="albedo12m"/>
 			<var name="greenfrac"/>
-			<var name="pin"/>
-			<var name="ozmixm"/>
                 </stream>
 
 		<stream name="input" 
