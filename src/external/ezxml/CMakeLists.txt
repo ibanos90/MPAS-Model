@@ -1,6 +1,6 @@
 
 add_library(ezxml ezxml.c)
-add_library(MPAS::external::ezxml ALIAS ezxml)
+add_library(${PROJECT_NAME}::external::ezxml ALIAS ezxml)
 target_include_directories(ezxml PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 install(TARGETS ezxml EXPORT ${PROJECT_NAME}ExportsExternal

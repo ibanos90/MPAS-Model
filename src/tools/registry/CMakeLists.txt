@@ -1,8 +1,8 @@
 
 #Parsing library core-independent code
 add_library(parselib dictionary.c fortprintf.c utility.c)
-target_link_libraries(parselib PUBLIC MPAS::external::ezxml)
-target_link_libraries(parselib PUBLIC MPAS::external::esmf)
+target_link_libraries(parselib PUBLIC ${PROJECT_NAME}::external::ezxml)
+target_link_libraries(parselib PUBLIC ${PROJECT_NAME}::external::esmf)
 
 # Generate parser for each core
 #

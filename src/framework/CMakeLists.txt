@@ -35,12 +35,12 @@ set(_mpas_framework_src
 
 add_library(framework ${_mpas_framework_src})
 mpas_fortran_target(framework)
-add_library(MPAS::framework ALIAS framework)
+add_library(${PROJECT_NAME}::framework ALIAS framework)
 
 set_target_properties(framework PROPERTIES OUTPUT_NAME mpas_framework)
 
-target_link_libraries(framework PUBLIC MPAS::external::esmf)
-target_link_libraries(framework PUBLIC MPAS::external::ezxml)
+target_link_libraries(framework PUBLIC ${PROJECT_NAME}::external::esmf)
+target_link_libraries(framework PUBLIC ${PROJECT_NAME}::external::ezxml)
 target_link_libraries(framework PUBLIC PIO::PIO_Fortran PIO::PIO_C)
 target_link_libraries(framework PUBLIC PnetCDF::PnetCDF_Fortran)
 target_link_libraries(framework PUBLIC NetCDF::NetCDF_Fortran)

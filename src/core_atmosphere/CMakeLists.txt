@@ -153,7 +153,7 @@ endforeach()
 install(DIRECTORY ${_physics_wrf_datadir}/ DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/core_atmosphere)
 
 add_executable(mpas_atmosphere_build_tables ${_atm_core_utils_srcs})
-target_link_libraries(mpas_atmosphere_build_tables PUBLIC MPAS::core::atmosphere)
+target_link_libraries(mpas_atmosphere_build_tables PUBLIC core_atmosphere)
 mpas_fortran_target(mpas_atmosphere_build_tables)
 install(TARGETS mpas_atmosphere_build_tables EXPORT ${PROJECT_NAME}ExportsCore
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

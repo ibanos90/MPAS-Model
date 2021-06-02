@@ -37,7 +37,7 @@
 
 #Include targets file.  This will create IMPORTED target @PROJECT_NAME@
 string(TOLOWER @PROJECT_NAME@ _project_name_lower)
-if(NOT TARGET MPAS::framework)
+if(NOT TARGET @PROJECT_NAME@::framework)
     include("${CMAKE_CURRENT_LIST_DIR}/${_project_name_lower}-targets-external.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/${_project_name_lower}-targets.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/${_project_name_lower}-targets-core.cmake")
@@ -109,8 +109,7 @@ if(NOT @PROJECT_NAME@_FIND_QUIETLY)
         endif()
     endforeach()
 
-    get_target_property(location @PROJECT_NAME@::framework LOCATION) #Get location from any component
-    message(STATUS "Found @PROJECT_NAME@: ${location} (version: \"@PROJECT_VERSION@\") (components: ${_found_components})")
+    message(STATUS "Found @PROJECT_NAME@: (version: \"@PROJECT_VERSION@\") (components: ${_found_components})")
     unset(_found_components)
     unset(_all_components)
 endif()

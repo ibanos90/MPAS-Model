@@ -171,16 +171,16 @@ macro(mpas_core_target)
     target_include_directories(${_ARG_TARGET} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
     #Core-independent library dependencies
-    target_link_libraries(${_ARG_TARGET} PUBLIC MPAS::framework)
-    target_link_libraries(${_ARG_TARGET} PUBLIC MPAS::operators)
+    target_link_libraries(${_ARG_TARGET} PUBLIC ${PROJECT_NAME}::framework)
+    target_link_libraries(${_ARG_TARGET} PUBLIC ${PROJECT_NAME}::operators)
 
     #Define alias for external use
-    add_library(MPAS::core::${_ARG_CORE} ALIAS ${_ARG_TARGET})
+    add_library(${PROJECT_NAME}::core::${_ARG_CORE} ALIAS ${_ARG_TARGET})
 
     #Create main executable
     add_executable(mpas_${_ARG_CORE} ${MPAS_MAIN_SRC})
     mpas_fortran_target(mpas_${_ARG_CORE})
-    target_link_libraries(mpas_${_ARG_CORE} PUBLIC MPAS::core::${_ARG_CORE})
+    target_link_libraries(mpas_${_ARG_CORE} PUBLIC ${PROJECT_NAME}::core::${_ARG_CORE})
 
     #Per-core generated output and tables directory location
     set(CORE_DATADIR ${CMAKE_BINARY_DIR}/${PROJECT_NAME}/${_ARG_TARGET})

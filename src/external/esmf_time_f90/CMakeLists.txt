@@ -20,7 +20,7 @@ set(_esmf_time_src
 
 add_library(esmf ${_esmf_time_src})
 mpas_fortran_target(esmf)
-add_library(MPAS::external::esmf ALIAS esmf)
+add_library(${PROJECT_NAME}::external::esmf ALIAS esmf)
 
 target_compile_definitions(esmf PRIVATE HIDE_MPI=1)
 
