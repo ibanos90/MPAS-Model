@@ -14,6 +14,7 @@ module convective_diagnostics
     type (MPAS_pool_type), pointer :: mesh
     type (MPAS_pool_type), pointer :: state
     type (MPAS_pool_type), pointer :: diag
+    type (MPAS_pool_type), pointer :: diag_physics
 
     type (MPAS_clock_type), pointer :: clock
 
@@ -34,6 +35,12 @@ module convective_diagnostics
     logical :: is_needed_w_max
     logical :: is_needed_lml_wsp_max
   
+    ! options for UKMO total cloud cover (subroutine r2_calc_total_cloud_cover)
+    integer, parameter :: ip_cloud_mix_max    = 1
+    integer, parameter :: ip_cloud_mix_random = 2
+    integer, parameter :: ip_cloud_column_max = 3
+    integer, parameter :: ip_cloud_triple     = 4
+    integer, parameter :: ip_cloud_clear      = 5
 
     contains
 
@@ -65,6 +72,7 @@ module convective_diagnostics
         call mpas_pool_get_subpool(all_pools, 'mesh', mesh)
         call mpas_pool_get_subpool(all_pools, 'state', state)
         call mpas_pool_get_subpool(all_pools, 'diag', diag)
+        call mpas_pool_get_subpool(all_pools, 'diag_physics', diag_physics)
 
         clock => simulation_clock
 
@@ -250,6 +258,10 @@ module convective_diagnostics
         real (kind=RKIND), dimension(:), pointer :: umeridional_6km
         real (kind=RKIND), dimension(:), pointer :: temperature_surface
         real (kind=RKIND), dimension(:), pointer :: dewpoint_surface
+        real (kind=RKIND), dimension(:), pointer :: cldfrac_low_UPP
+        real (kind=RKIND), dimension(:), pointer :: cldfrac_mid_UPP
+        real (kind=RKIND), dimension(:), pointer :: cldfrac_high_UPP
+        real (kind=RKIND), dimension(:), pointer :: cldfrac_tot_UPP
 
         ! Other fields used in the computation of convective diagnostics 
         ! defined above
@@ -263,6 +275,7 @@ module convective_diagnostics
         real (kind=RKIND), dimension(:,:), pointer :: pressure_base
         real (kind=RKIND), dimension(:,:,:), pointer :: scalars
         integer, pointer :: index_qv
+        real (kind=RKIND), dimension(:,:), pointer :: cldfrac
 
         real (kind=RKIND), parameter :: dev_motion = 7.5, z_bunker_bot = 0., z_bunker_top = 6000.
         real (kind=RKIND)            :: u_storm, v_storm, u_srh_bot, v_srh_bot, u_srh_top, v_srh_top
@@ -276,8 +289,19 @@ module convective_diagnostics
 
         real (kind=RKIND) :: evp
 
+        ! levels for low/mid/high cloud fraction - UPP method
+        real (kind=RKIND), parameter :: ptop_low = 64200.0, ptop_mid = 35000.0, ptop_high = 15000.0
+
+        ! levels for low/mid/high cloud fraction - UKMO method
+        real (kind=RKIND), parameter :: ptop_low_ = 80000.0, ptop_mid_ = 50000.0, ptop_high_ = 15000.0
+        real (kind=RKIND), parameter :: thresh_cld = 0.0627
+        real (kind=RKIND), parameter :: msgval = -999.0
+
+        real (kind=RKIND), dimension(:,:), allocatable :: cldfrac2
+
         logical :: need_cape, need_cin, need_lcl, need_lfc, need_srh_01km, need_srh_03km, need_uzonal_sfc, need_uzonal_1km, &
                    need_uzonal_6km, need_umerid_sfc, need_umerid_1km, need_umerid_6km, need_tsfc, need_tdsfc
+        logical :: need_cldfrac_UPP
         logical :: need_any_diags
 
         need_any_diags = .false.
@@ -310,6 +334,11 @@ module convective_diagnostics
         need_any_diags = need_any_diags .or. need_tsfc
         need_tdsfc = MPAS_field_will_be_written('dewpoint_surface')
         need_any_diags = need_any_diags .or. need_tdsfc
+        need_cldfrac_UPP = MPAS_field_will_be_written('cldfrac_low_UPP')
+        need_cldfrac_UPP = MPAS_field_will_be_written('cldfrac_mid_UPP')  .or. need_cldfrac_UPP
+        need_cldfrac_UPP = MPAS_field_will_be_written('cldfrac_high_UPP') .or. need_cldfrac_UPP
+        need_cldfrac_UPP = MPAS_field_will_be_written('cldfrac_tot_UPP')  .or. need_cldfrac_UPP
+        need_any_diags = need_any_diags .or. need_cldfrac_UPP
 
         if (need_any_diags) then
 
@@ -332,6 +361,12 @@ module convective_diagnostics
             call mpas_pool_get_array(diag, 'umeridional_6km', umeridional_6km)
             call mpas_pool_get_array(diag, 'temperature_surface', temperature_surface)
             call mpas_pool_get_array(diag, 'dewpoint_surface', dewpoint_surface)
+            if ( need_cldfrac_UPP ) then
+                call mpas_pool_get_array(diag, 'cldfrac_low_UPP',  cldfrac_low_UPP)
+                call mpas_pool_get_array(diag, 'cldfrac_mid_UPP',  cldfrac_mid_UPP)
+                call mpas_pool_get_array(diag, 'cldfrac_high_UPP', cldfrac_high_UPP)
+                call mpas_pool_get_array(diag, 'cldfrac_tot_UPP',  cldfrac_tot_UPP)
+            end if
 
             call mpas_pool_get_array(mesh, 'zgrid', height)
             call mpas_pool_get_array(diag, 'uReconstructMeridional', umeridional)
@@ -342,6 +377,15 @@ module convective_diagnostics
             call mpas_pool_get_array(diag, 'relhum', relhum)
             call mpas_pool_get_array(diag, 'pressure_base', pressure_base)
             call mpas_pool_get_array(diag, 'pressure_p', pressure_p)
+            if ( need_cldfrac_UPP) then
+                call mpas_pool_get_array(diag_physics, 'cldfrac', cldfrac)
+                ! do we impose 0.0/1.0 limit to cldfrac here?
+                do iCell = 1, nCells
+                   do k = 1, nVertLevels
+                      cldfrac(k,iCell) = max(min(cldfrac(k,iCell),1.0),0.0)
+                   end do
+                end do
+            end if
 
             call mpas_pool_get_dimension(state, 'index_qv', index_qv)
 
@@ -468,6 +512,26 @@ module convective_diagnostics
                     cape(iCell) = cape_out
                     cin(iCell) = cin_out
 
+                end do
+            end if
+
+            if ( need_cldfrac_UPP ) then
+                do iCell = 1, nCellsSolve
+                    cldfrac_low_UPP (iCell) = 0.0
+                    cldfrac_mid_UPP (iCell) = 0.0
+                    cldfrac_high_UPP(iCell) = 0.0
+                    cldfrac_tot_UPP (iCell) = 0.0
+                    p_in(1:nVertLevels) = pressure_p(1:nVertLevels,iCell) + pressure_base(1:nVertLevels,iCell)
+                    do k = 1, nVertLevels
+                       if ( p_in(k) >= ptop_low ) then
+                           cldfrac_low_UPP(iCell)  = max(cldfrac_low_UPP(iCell), cldfrac(k,iCell))
+                       else if ( p_in(k) < ptop_low .and. p_in(k) >= ptop_mid  ) then
+                           cldfrac_mid_UPP(iCell)  = max(cldfrac_mid_UPP(iCell), cldfrac(k,iCell))
+                       else if ( p_in(k) < ptop_mid .and. p_in(k) >= ptop_high ) then
+                           cldfrac_high_UPP(iCell) = max(cldfrac_high_UPP(iCell), cldfrac(k,iCell))
+                       end if
+                       cldfrac_tot_UPP(iCell) = max(cldfrac_tot_UPP(iCell), cldfrac(k,iCell))
+                    end do
                 end do
             end if
 
@@ -1092,8 +1156,6 @@ module convective_diagnostics
     return
     end function getthe
 
-!-----------------------------------------------------------------------
-!ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 !-----------------------------------------------------------------------
 
 end module convective_diagnostics
