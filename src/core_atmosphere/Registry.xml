@@ -1018,6 +1018,8 @@
 			<var name="refl10cm_max"/>
 			<var name="refl10cm_1km"/>
 			<var name="refl10cm_1km_max"/>
+			<!-- Added by RRB to write 3D reflectivity -->
+			<var name="refl10cm"/>
 			<var name="precipw"/>
 			<var name="u10"/>
 			<var name="v10"/>
@@ -2212,6 +2214,11 @@
 
                 <var name="refl10cm_1km_max" type="real" dimensions="nCells Time" units="dBZ"
                      description="maximum diagnosed 10 cm radar reflectivity at 1 km AGL since last output time"
+                     packages="mp_thompson_in;mp_wsm6_in"/>
+
+                <!-- Added by RRB to write 3D reflectivity -->
+                <var name="refl10cm" type="real" dimensions="nVertLevels nCells Time" units="dBZ"
+                     description="10 cm radar reflectivity at ALL model levels since last output time"
                      packages="mp_thompson_in;mp_wsm6_in"/>
 
                 <var name="i_rainnc" type="integer" dimensions="nCells Time" units="unitless"
