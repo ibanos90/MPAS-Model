@@ -218,9 +218,6 @@
 !      if(is .lt. luseas) call mpas_log_write('')
     enddo
 
-    close(land_unit)  
-    call mpas_release_unit(land_unit)
-
 !defines the index isurban as a function of sfc_input_data:
     sfc_input_select: select case(trim(lutype))
        case('OLD')

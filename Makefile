@@ -159,8 +159,7 @@ pgi-summit:
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
 	"OPENMP = $(OPENMP)" \
-	"OPENACC = $(OPENACC)" \
-	"CPPFLAGS = -DpgiFortran -D_MPI -DUNDERSCORE" )
+	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
 
 pgi-nersc:
 	( $(MAKE) all \
@@ -182,7 +181,7 @@ pgi-nersc:
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
 	"OPENMP = $(OPENMP)" \
-	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI -DCPRPGI" )
+	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
 
 pgi-llnl:
 	( $(MAKE) all \
@@ -204,7 +203,7 @@ pgi-llnl:
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
 	"OPENMP = $(OPENMP)" \
-	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI -DCPRPGI" )
+	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
 
 ifort:
 	( $(MAKE) all \
@@ -294,14 +293,14 @@ gfortran:
 	"CC_SERIAL = gcc" \
 	"CXX_SERIAL = g++" \
 	"FFLAGS_PROMOTION = -fdefault-real-8 -fdefault-double-8" \
-	"FFLAGS_OPT = -O3 -m64 -ffree-line-length-none -fconvert=big-endian -ffree-form" \
-	"CFLAGS_OPT = -O3 -m64" \
-	"CXXFLAGS_OPT = -O3 -m64" \
-	"LDFLAGS_OPT = -O3 -m64" \
-	"FFLAGS_DEBUG = -g -m64 -ffree-line-length-none -fconvert=big-endian -ffree-form -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow" \
-	"CFLAGS_DEBUG = -g -m64" \
-	"CXXFLAGS_DEBUG = -O3 -m64" \
-	"LDFLAGS_DEBUG = -g -m64" \
+	"FFLAGS_OPT = -O3 -ffree-line-length-none -fconvert=big-endian -ffree-form" \
+	"CFLAGS_OPT = -O3" \
+	"CXXFLAGS_OPT = -O3" \
+	"LDFLAGS_OPT = -O3" \
+	"FFLAGS_DEBUG = -g -ffree-line-length-none -fconvert=big-endian -ffree-form -fcheck=all -fbacktrace -ffpe-trap=invalid,zero,overflow" \
+	"CFLAGS_DEBUG = -g" \
+	"CXXFLAGS_DEBUG = -g" \
+	"LDFLAGS_DEBUG = -g" \
 	"FFLAGS_OMP = -fopenmp" \
 	"CFLAGS_OMP = -fopenmp" \
 	"PICFLAG = -fPIC" \
@@ -530,7 +529,7 @@ nag:
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
 	"OPENMP = $(OPENMP)" \
-	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI -DUNDERSCORE -DNAG_COMPILER" )
+	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
 
 CPPINCLUDES =
 FCINCLUDES =
@@ -613,21 +612,9 @@ endif
 
 
 ifneq "$(PNETCDF)" ""
-ifneq ($(wildcard $(PNETCDF)/lib), )
-	PNETCDFLIBLOC = lib
-endif
-ifneq ($(wildcard $(PNETCDF)/lib64), )
-	PNETCDFLIBLOC = lib64
-endif
 	CPPINCLUDES += -I$(PNETCDF)/include
 	FCINCLUDES += -I$(PNETCDF)/include
-	LIBS += -L$(PNETCDF)/$(PNETCDFLIBLOC) -lpnetcdf
-endif
-
-ifneq "$(LAPACK)" ""
-        LIBS += -L$(LAPACK)
-        LIBS += -llapack
-        LIBS += -lblas
+	LIBS += -L$(PNETCDF)/lib -lpnetcdf
 endif
 
 RM = rm -f

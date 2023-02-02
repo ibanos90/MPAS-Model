@@ -36,6 +36,7 @@ module atm_core
       real (kind=RKIND), pointer :: dt
       type (block_type), pointer :: block
 
+      integer :: i
       logical, pointer :: config_do_restart
 
       type (mpas_pool_type), pointer :: state

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<registry model="mpas" core="atmosphere" core_abbrev="atm" version="7.0">
+<registry model="mpas" core="atmosphere" core_abbrev="atm" version="7.3">
 
 <!-- **************************************************************************************** -->
 <!-- ************************************** Dimensions ************************************** -->
@@ -518,8 +518,17 @@
 			<var name="rainc"/>
 			<var name="rainnc"/>
 			<var name="lai"/>
+			<var name="isltyp"/>
+			<var name="ivgtyp"/>
+			<var name="mminlu"/>
 			<var name="isice_lu"/>
 			<var name="iswater_lu"/>
+			<var name="landmask"/>
+			<var name="shdmin"/>
+			<var name="shdmax"/>
+			<var name="snoalb"/>
+			<var name="albedo12m"/>
+			<var name="greenfrac"/>
 			<var name="sfc_albbck"/>
 			<var name="sfc_albedo"/>
 			<var name="sfc_albedo_seaice"/>
@@ -1018,6 +1027,8 @@
 			<var name="refl10cm_max"/>
 			<var name="refl10cm_1km"/>
 			<var name="refl10cm_1km_max"/>
+                        <!-- Added by RRB to write 3D reflectivity -->
+                        <var name="refl10cm"/>
 			<var name="precipw"/>
 			<var name="u10"/>
 			<var name="v10"/>
@@ -1070,7 +1081,7 @@
 			<var name="w_850hPa"/>
 			<var name="w_925hPa"/>
 			<var name="vorticity_200hPa"/>
-			<var name="vorticity_250hPa"/>
+			<var name="vorticity_300hPa"/>
 			<var name="vorticity_500hPa"/>
 			<var name="vorticity_700hPa"/>
 			<var name="vorticity_850hPa"/>
@@ -1217,6 +1228,7 @@
 			<var name="tslb"/>
 			<var name="h_oml_initial"/>
                 </stream>
+
 	</streams>
 
 
@@ -1452,10 +1464,10 @@
                      description="weights for cell-centered second derivative, normal to edge, for transport scheme"/>
 
                 <var name="adv_coefs" type="real" dimensions="FIFTEEN nEdges" units="unitless"
-                     description="Weighting coefficents used for reconstructing cell-based foelds at edges"/>
+                     description="Weighting coefficients used for reconstructing cell-based fields at edges"/>
 
                 <var name="adv_coefs_3rd" type="real" dimensions="FIFTEEN nEdges" units="unitless"
-                     description="Weighting coefficents used for reconstructing cell-based foelds at edges"/>
+                     description="Weighting coefficients used for reconstructing cell-based fields at edges"/>
 
                 <var name="advCellsForEdge" type="integer" dimensions="FIFTEEN nEdges" units="-"
                      description="Cells used to reconstruct a cell-based field at an edge"/>
@@ -2212,6 +2224,11 @@
 
                 <var name="refl10cm_1km_max" type="real" dimensions="nCells Time" units="dBZ"
                      description="maximum diagnosed 10 cm radar reflectivity at 1 km AGL since last output time"
+                     packages="mp_thompson_in;mp_wsm6_in"/>
+
+                <!-- Added by RRB to write 3D reflectivity -->
+                <var name="refl10cm" type="real" dimensions="nVertLevels nCells Time" units="dBZ"
+                     description="10 cm radar reflectivity at ALL model levels since last output time"
                      packages="mp_thompson_in;mp_wsm6_in"/>
 
                 <var name="i_rainnc" type="integer" dimensions="nCells Time" units="unitless"
@@ -3117,7 +3134,7 @@
                      description="terrain height"/>
 
                 <var name="albedo12m" type="real" dimensions="nMonths nCells" units="unitless"
-                     description="monthly-mean climatological aurface albedo"/>
+                     description="monthly-mean climatological surface albedo"/>
 
                 <var name="greenfrac" type="real" dimensions="nMonths nCells" units="unitless"
                      description="monthly-mean climatological greeness fraction"/>
@@ -3175,35 +3192,35 @@
                 <!-- ... PARAMETERIZATION OF GRAVITY WAVE DRAG OVER OROGRAPHY:                                          -->
                 <!-- ================================================================================================== -->
 
-                <var name="var2d" type="real" dimensions="nCells" units="m^{2}"
-                     description="variance of orography"/>
+                <var name="var2d" type="real" dimensions="nCells" units="m"
+                     description="standard deviation of subgrid-scale orography"/>
 
-                <var name="con" type="real" dimensions="nCells" units="m^{2}"
-                     description="convexity of orography"/>
+                <var name="con" type="real" dimensions="nCells" units="unitless"
+                     description="orographic convexity"/>
 
                 <var name="oa1" type="real" dimensions="nCells" units="unitless"
-                     description="directional asymmetry function of orography"/>
+                     description="asymmetry of subgrid-scale orography for westerly flow"/>
 
                 <var name="oa2" type="real" dimensions="nCells" units="unitless"
-                     description="directional asymmetry function of orography"/>
+                     description="asymmetry of subgrid-scale orography for southerly flow"/>
 
                 <var name="oa3" type="real" dimensions="nCells" units="unitless"
-                     description="directional asymmetry function of orography"/>
+                     description="asymmetry of subgrid-scale orography for south-westerly flow"/>
 
                 <var name="oa4" type="real" dimensions="nCells" units="unitless"
-                     description="directional asymmetry function of orography"/>
+                     description="asymmetry of subgrid-scale orography for north-westerly flow"/>
 
                 <var name="ol1" type="real" dimensions="nCells" units="unitless"
-                     description="directional asymmetry function of orography"/>
+                     description="effective orographic length for westerly flow"/>
 
                 <var name="ol2" type="real" dimensions="nCells" units="unitless"
-                     description="directional asymmetry function of orography"/>
+                     description="effective orographic length for southerly flow"/>
 
                 <var name="ol3" type="real" dimensions="nCells" units="unitles"
-                     description="directional asymmetry function of orography"/>
+                     description="effective orographic length for south-westerly flow"/>
 
                 <var name="ol4" type="real" dimensions="nCells" units="unitless"
-                     description="directional asymmetry function of orography"/>
+                     description="effective orographic length for north-westerly flow"/>
         </var_struct>
 
         <var_struct name="tend_iau" time_levs="1" packages="iau">

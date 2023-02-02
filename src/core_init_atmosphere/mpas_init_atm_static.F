@@ -20,9 +20,6 @@
  use mpas_geometry_utils, only : mpas_in_cell
  use mpas_atmphys_utilities
 
- use mpas_kd_tree, only : mpas_kd_type, mpas_kd_construct, mpas_kd_free, mpas_kd_search
- use mpas_geotile_manager, only : mpas_geotile_mgr_type, mpas_geotile_type, mpas_latlon_to_xyz
-
  use iso_c_binding, only : c_char, c_int, c_float, c_loc, c_ptr
 
  implicit none
@@ -34,7 +31,7 @@
 
  interface
     subroutine read_geogrid(fname, rarray, nx, ny, nz, isigned, endian, &
-                            wordsize, status) bind(C)
+                            scalefactor, wordsize, status) bind(C)
        use iso_c_binding, only : c_char, c_int, c_float, c_ptr
        character (c_char), dimension(*), intent(in) :: fname
        type (c_ptr), value :: rarray
@@ -43,6 +40,7 @@
        integer (c_int), intent(in), value :: nz
        integer (c_int), intent(in), value :: isigned
        integer (c_int), intent(in), value :: endian
+       real (c_float), intent(in), value :: scalefactor
        integer (c_int), intent(in), value :: wordsize
        integer (c_int), intent(inout) :: status
     end subroutine read_geogrid
@@ -78,6 +76,8 @@
  character(len=StrKIND+1) :: geog_data_path      ! same as config_geog_data_path, but guaranteed to have a trailing slash
  character(len=StrKIND+1) :: geog_sub_path       ! subdirectory names in config_geog_data_path, with trailing slash
 
+ integer:: ismax_lu
+
  integer(c_int):: nx,ny,nz
  integer(c_int):: endian,isigned,istatus,wordsize
  integer:: i,j,k
@@ -86,8 +86,7 @@
  integer,dimension(5) :: interp_list
  integer,dimension(:),allocatable  :: nhs
  integer,dimension(:,:),allocatable:: ncat
-      
- real(kind=RKIND), pointer :: scalefactor_ptr
+
  real(kind=c_float):: scalefactor
  real(kind=c_float),dimension(:,:,:),pointer,contiguous :: rarray
  type(c_ptr) :: rarray_ptr
@@ -104,10 +103,7 @@
  real(kind=RKIND),dimension(:,:,:),allocatable:: vegfra
 
  integer, pointer :: isice_lu, iswater_lu
- integer, pointer :: isice_lu_ptr, iswater_lu_ptr
- integer :: iswater_soil
- integer, pointer :: iswater_soil_ptr
- integer, pointer :: nCells, nCellsSolve, nEdges, nVertices, maxEdges
+ integer, pointer :: nCells, nEdges, nVertices, maxEdges
  logical, pointer :: on_a_sphere
  real (kind=RKIND), pointer :: sphere_radius
  
@@ -133,7 +129,6 @@
  real (kind=RKIND), dimension(:,:), pointer :: greenfrac
  real (kind=RKIND), dimension(:,:), pointer :: albedo12m
  real (kind=RKIND) :: msgval, fillval
- integer, pointer :: category_min, category_max
  integer, dimension(:), pointer :: lu_index
  integer, dimension(:), pointer :: soilcat_top
  integer, dimension(:), pointer :: landmask
@@ -141,20 +136,6 @@
  character(len=StrKIND), pointer :: mminlu
 
  real (kind=RKIND) :: xPixel, yPixel, zPixel
-
- type (mpas_kd_type), dimension(:), pointer :: kd_points
- type (mpas_kd_type), pointer :: tree
- type (mpas_kd_type), pointer :: res
-
- type (mpas_geotile_mgr_type) :: mgr
- type (mpas_geotile_type), pointer :: tile
-
- real (kind=RKIND) :: tval
- integer, pointer :: tile_bdr
- integer, pointer :: tile_nx, tile_ny
-
- logical :: all_pixels_mapped_to_halo_cells
- integer :: ierr
 
 !--------------------------------------------------------------------------------------------------
 
@@ -302,6 +283,24 @@
 !
 ! Interpolate HGT
 !
+!nx = 126
+!ny = 126
+ nx = 1206
+ ny = 1206
+ nz = 1
+ isigned  = 1
+ endian   = 0
+ wordsize = 2
+ scalefactor = 1.0
+ allocate(rarray(nx,ny,nz))
+ allocate(nhs(nCells))
+ nhs(:) = 0
+ ter(:) = 0.0
+
+ rarray_ptr = c_loc(rarray)
+
+ start_lat = -89.99583
+
  select case(trim(config_topo_data))
     case('GTOPO30')
        call mpas_log_write('Using GTOPO30 terrain dataset')
@@ -318,10 +317,57 @@
        call mpas_log_write('Please correct the namelist.', messageType=MPAS_LOG_CRIT)
  end select
 
- ierr = mgr % init(trim(config_geog_data_path)//trim(geog_sub_path))
- if (ierr /= 0) then
-    call mpas_log_write('Error occured when initalizing the interpolation of terrain height (ter)', messageType=MPAS_LOG_CRIT)
- endif
+ do jTileStart = 1,20401,ny-6
+    jTileEnd = jTileStart + ny - 1 - 6
+
+    do iTileStart=1,42001,nx-6
+       iTileEnd = iTileStart + nx - 1 - 6
+       write(fname,'(a,i5.5,a1,i5.5,a1,i5.5,a1,i5.5)') trim(geog_data_path)//trim(geog_sub_path), &
+                    iTileStart,'-',iTileEnd,'.',jTileStart,'-',jTileEnd
+       call mpas_log_write(trim(fname))
+       call mpas_f_to_c_string(fname, c_fname)
+
+       call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
+                         scalefactor,wordsize,istatus)
+       call init_atm_check_read_error(istatus, fname)
+
+       iPoint = 1
+       do j=4,ny-3
+       do i=4,nx-3
+          lat_pt = start_lat + (jTileStart + j - 5) * 0.0083333333
+          lon_pt = start_lon + (iTileStart + i - 5) * 0.0083333333
+          lat_pt = lat_pt * PI / 180.0
+          lon_pt = lon_pt * PI / 180.0
+
+          iPoint = nearest_cell(lat_pt,lon_pt,iPoint,nCells,maxEdges, &
+                                nEdgesOnCell,cellsOnCell, &
+                                latCell,lonCell)
+
+          !
+          ! For all but the outermost boundary cells, we can safely assume that the nearest
+          ! model grid cell contains the pixel (else, a different cell would be nearest)
+          !
+          if (bdyMaskCell(iPoint) < nBdyLayers) then
+             ter(iPoint) = ter(iPoint) + rarray(i,j,1)
+             nhs(iPoint) = nhs(iPoint) + 1
+
+          ! For outermost boundary cells, additional work is needed to verify that the pixel
+          ! actually lies within the nearest cell
+          else
+             zPixel = sphere_radius * sin(lat_pt)                  ! Model cell coordinates assume a "full" sphere radius
+             xPixel = sphere_radius * cos(lon_pt) * cos(lat_pt)    ! at this point, so we need to ues the same radius
+             yPixel = sphere_radius * sin(lon_pt) * cos(lat_pt)    ! for source pixel coordinates
+
+             if (in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
+                         nEdgesOnCell(iPoint), verticesOnCell(:,iPoint), xVertex, yVertex, zVertex)) then
+
+                ter(iPoint) = ter(iPoint) + rarray(i,j,1)
+                nhs(iPoint) = nhs(iPoint) + 1
+
+             end if
+          end if
+       end do
+       end do
 
 
  allocate(ter_integer(nCells))
@@ -489,28 +535,53 @@
  ncat(:,:) = 0
  lu_index(:) = 0
 
- do iCell = 1, nCells
+ rarray_ptr = c_loc(rarray)
 
-     if (all(ncat(:,iCell) == 0)) then
-         tile => null()
-         ierr = mgr % get_tile(latCell(iCell), lonCell(iCell), tile)
-         if (ierr /= 0 .or. .not. associated(tile)) then
-             call mpas_log_write('Could not get the tile that contained cell $i', intArgs=(/iCell/), messageType=MPAS_LOG_CRIT)
-         end if
+ do jTileStart = 1,20401,ny
+    jTileEnd = jTileStart + ny - 1
 
-         ierr = mgr % push_tile(tile)
-         if (ierr /= 0) then
-             call mpas_log_write('Error pushing this tile onto the stack: '//trim(tile%fname), messageType=MPAS_LOG_CRIT)
-         end if
-     end if
+    do iTileStart = 1,42001,nx
+       iTileEnd = iTileStart + nx - 1
+       write(fname,'(a,i5.5,a1,i5.5,a1,i5.5,a1,i5.5)') trim(geog_data_path)// &
+             trim(geog_sub_path),iTileStart,'-',iTileEnd,'.',jTileStart,'-',jTileEnd
+       call mpas_log_write(trim(fname))
+       call mpas_f_to_c_string(fname, c_fname)
+
+       call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
+                         scalefactor,wordsize,istatus)
+       call init_atm_check_read_error(istatus, fname)
 
 
      do while (.not. mgr % is_stack_empty())
          tile => mgr % pop_tile()
 
-         if (tile % is_processed) then
-             cycle
-         endif
+          iPoint = nearest_cell(lat_pt,lon_pt,iPoint,nCells,maxEdges, &
+                                nEdgesOnCell,cellsOnCell, &
+                                latCell,lonCell)
+
+          !
+          ! For all but the outermost boundary cells, we can safely assume that the nearest
+          ! model grid cell contains the pixel (else, a different cell would be nearest)
+          !
+          if (bdyMaskCell(iPoint) < nBdyLayers) then
+             ncat(int(rarray(i,j,1)),iPoint) = ncat(int(rarray(i,j,1)),iPoint) + 1
+
+          ! For outermost boundary cells, additional work is needed to verify that the pixel
+          ! actually lies within the nearest cell
+          else
+             zPixel = sphere_radius * sin(lat_pt)                  ! Model cell coordinates assume a "full" sphere radius
+             xPixel = sphere_radius * cos(lon_pt) * cos(lat_pt)    ! at this point, so we need to ues the same radius
+             yPixel = sphere_radius * sin(lon_pt) * cos(lat_pt)    ! for source pixel coordinates
+
+             if (in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
+                         nEdgesOnCell(iPoint), verticesOnCell(:,iPoint), xVertex, yVertex, zVertex)) then
+
+                ncat(int(rarray(i,j,1)),iPoint) = ncat(int(rarray(i,j,1)),iPoint) + 1
+
+             end if
+          end if
+       end do
+       end do
 
          call mpas_log_write('Processing tile: '//trim(tile%fname))
 
@@ -612,85 +683,59 @@
  soilcat_top(:) = 0
  ncat(:,:) = 0
 
- do iCell = 1, nCells
+ soilcat_top(:) = 0.0
 
-     if (all(ncat(:,iCell) == 0)) then
-         tile => null()
-         ierr = mgr % get_tile(latCell(iCell), lonCell(iCell), tile)
-         if (ierr /= 0 .or. .not. associated(tile)) then
-             call mpas_log_write('Could not get the tile that contained cell $i', intArgs=(/iCell/), messageType=MPAS_LOG_CRIT)
-         end if
+ rarray_ptr = c_loc(rarray)
 
-         ierr = mgr % push_tile(tile)
-         if (ierr /= 0) then
-             call mpas_log_write('Error pushing this tile onto the stack: '//trim(tile%fname), messageType=MPAS_LOG_CRIT)
-         end if
-    end if
+ do jTileStart = 1,20401,ny
+    jTileEnd = jTileStart + ny - 1
 
-    do while(.not. mgr % is_stack_empty())
-        tile => mgr % pop_tile()
+    do iTileStart = 1,42001,nx
+       iTileEnd = iTileStart + nx - 1
+       write(fname,'(a,i5.5,a1,i5.5,a1,i5.5,a1,i5.5)') trim(geog_data_path)// &
+             'soiltype_top_30s/',iTileStart,'-',iTileEnd,'.',jTileStart,'-',jTileEnd
+       call mpas_log_write(trim(fname))
+       call mpas_f_to_c_string(fname, c_fname)
 
-        if (tile % is_processed) then
-            cycle
-        end if
+       call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
+                         scalefactor,wordsize,istatus)
+       call init_atm_check_read_error(istatus, fname)
 
-        call mpas_log_write('Processing tile: '//trim(tile%fname))
+       iPoint = 1
+       do j=1,ny
+       do i=1,nx
+          lat_pt = -89.99583  + (jTileStart + j - 2) * 0.0083333333
+          lon_pt = -179.99583 + (iTileStart + i - 2) * 0.0083333333
+          lat_pt = lat_pt * PI / 180.0
+          lon_pt = lon_pt * PI / 180.0
 
-        all_pixels_mapped_to_halo_cells = .true.
+          iPoint = nearest_cell(lat_pt,lon_pt,iPoint,nCells,maxEdges, &
+                                nEdgesOnCell,cellsOnCell, &
+                                latCell,lonCell)
 
-        do j = 1 + tile_bdr, tile_ny + tile_bdr, 1
-            do i = 1 + tile_bdr, tile_nx + tile_bdr, 1
+          !
+          ! For all but the outermost boundary cells, we can safely assume that the nearest
+          ! model grid cell contains the pixel (else, a different cell would be nearest)
+          !
+          if (bdyMaskCell(iPoint) < nBdyLayers) then
+             ncat(int(rarray(i,j,1)),iPoint) = ncat(int(rarray(i,j,1)),iPoint) + 1
 
-                !
-                ! While the currently used soil type dataset, soiltype_top_30s, does not contain any
-                ! invalid values, have this sanity check for any future soil type datasets
-                !
-                if (tile % tile(i,j,1) < category_min .or. tile % tile(i,j,1) > category_max) then
-                    cycle
-                end if
+          ! For outermost boundary cells, additional work is needed to verify that the pixel
+          ! actually lies within the nearest cell
+          else
+             zPixel = sphere_radius * sin(lat_pt)                  ! Model cell coordinates assume a "full" sphere radius
+             xPixel = sphere_radius * cos(lon_pt) * cos(lat_pt)    ! at this point, so we need to ues the same radius
+             yPixel = sphere_radius * sin(lon_pt) * cos(lat_pt)    ! for source pixel coordinates
 
-                call mgr % tile_to_latlon(tile, j, i, lat_pt, lon_pt)
-                call mpas_latlon_to_xyz(xPixel, yPixel, zPixel, sphere_radius, lat_pt, lon_pt)
+             if (in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
+                         nEdgesOnCell(iPoint), verticesOnCell(:,iPoint), xVertex, yVertex, zVertex)) then
 
-                res => null()
-                call mpas_kd_search(tree, (/xPixel, yPixel, zPixel/), res)
+                ncat(int(rarray(i,j,1)),iPoint) = ncat(int(rarray(i,j,1)),iPoint) + 1
 
-                !
-                ! For all but the outermost boundary cells, we can safely assume that the nearest
-                ! model grid cell contains the pixel (else, a different cell would be nearest)
-                !
-                if (bdyMaskCell(res % id) < nBdyLayers) then
-
-                   ncat(int(tile % tile(i,j,1)), res % id) = ncat(int(tile % tile(i,j,1)), res % id) + 1
-
-                   if (res % id <= nCellsSolve) then
-                       all_pixels_mapped_to_halo_cells = .false.
-                   end if
-
-                ! For outermost boundary cells, additional work is needed to verify that the pixel
-                ! actually lies within the nearest cell
-                else
-                   if (mpas_in_cell(xPixel, yPixel, zPixel, xCell(res % id), yCell(res % id), zCell(res % id), &
-                                    nEdgesOnCell(res % id), verticesOnCell(:,res % id), xVertex, yVertex, zVertex)) then
-
-                      ncat(int(tile % tile(i,j,1)), res % id) = ncat(int(tile % tile(i,j,1)), res % id) + 1
-
-                      if (res % id <= nCellsSolve) then
-                          all_pixels_mapped_to_halo_cells = .false.
-                      end if
-                   end if
-                 end if
-            end do
-        end do
-
-        tile % is_processed = .true.
-
-        if (.not. all_pixels_mapped_to_halo_cells) then
-            ierr = mgr % push_neighbors(tile)
-            if (ierr /=0) then
-                call mpas_log_write("Error pushing the tile neighbors of: "//trim(tile%fname), messageType=MPAS_LOG_CRIT)
-            end if
-        end if
+             end if
+          end if
+       end do
+       end do
 
     end do
  end do
@@ -775,7 +820,7 @@
  call mpas_f_to_c_string(fname, c_fname)
 
  call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned, endian, &
-                   wordsize,istatus)
+                   scalefactor,wordsize,istatus)
  call init_atm_check_read_error(istatus, fname)
  rarray(:,:,:) = rarray(:,:,:) * scalefactor
  soiltemp_1deg(-2:180,-2:183) = rarray(1:183,1:186,1)
@@ -786,7 +831,7 @@
  call mpas_f_to_c_string(fname, c_fname)
 
  call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                   wordsize,istatus)
+                        scalefactor,wordsize,istatus)
  call init_atm_check_read_error(istatus,fname)
  rarray(:,:,:) = rarray(:,:,:) * scalefactor
  soiltemp_1deg(181:363,-2:183) = rarray(4:186,1:186,1)
@@ -865,9 +910,8 @@
           call mpas_f_to_c_string(fname, c_fname)
 
           call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                            wordsize,istatus)
+                            scalefactor,wordsize,istatus)
           call init_atm_check_read_error(istatus, fname)
-          rarray(:,:,:) = rarray(:,:,:) * scalefactor
 
           iPoint = 1
           do j=supersample_fac * 3 + 1, supersample_fac * (ny-3)
@@ -901,7 +945,7 @@
                    xPixel = sphere_radius * cos(lon_pt) * cos(lat_pt)    ! at this point, so we need to ues the same radius
                    yPixel = sphere_radius * sin(lon_pt) * cos(lat_pt)    ! for source pixel coordinates
 
-                   if (mpas_in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
+                   if (in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
                                nEdgesOnCell(iPoint), verticesOnCell(:,iPoint), xVertex, yVertex, zVertex)) then
                       snoalb(iPoint) = snoalb(iPoint) + rarray(ii,jj,1)
                       nhs(iPoint) = nhs(iPoint) + 1
@@ -962,9 +1006,8 @@
     call mpas_f_to_c_string(fname, c_fname)
 
     call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                      wordsize,istatus)
+                      scalefactor,wordsize,istatus)
     call init_atm_check_read_error(istatus,fname)
-    rarray(:,:,:) = rarray(:,:,:) * scalefactor
     maxsnowalb(-2:180,-2:183) = rarray(1:183,1:186,1)
 
     write(fname,'(a,i5.5,a1,i5.5,a1,i5.5,a1,i5.5)') trim(geog_data_path)// &
@@ -973,9 +1016,8 @@
     call mpas_f_to_c_string(fname, c_fname)
 
     call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                      wordsize,istatus)
+                      scalefactor,wordsize,istatus)
     call init_atm_check_read_error(istatus, fname)
-    rarray(:,:,:) = rarray(:,:,:) * scalefactor
     maxsnowalb(181:363,-2:183) = rarray(4:186,1:186,1)
 
     interp_list(1) = FOUR_POINT
@@ -1062,9 +1104,8 @@
           call mpas_f_to_c_string(fname, c_fname)
 
           call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                            wordsize,istatus)
+                            scalefactor,wordsize,istatus)
           call init_atm_check_read_error(istatus, fname)
-          rarray(:,:,:) = rarray(:,:,:) *  scalefactor
 
           iPoint = 1
           do j=1,ny
@@ -1099,7 +1140,7 @@
                 xPixel = sphere_radius * cos(lon_pt) * cos(lat_pt)    ! at this point, so we need to ues the same radius
                 yPixel = sphere_radius * sin(lon_pt) * cos(lat_pt)    ! for source pixel coordinates
 
-                if (mpas_in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
+                if (in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
                             nEdgesOnCell(iPoint), verticesOnCell(:,iPoint), xVertex, yVertex, zVertex)) then
                    do k=1,nz
                       if (rarray(i,j,k) == msgval) then
@@ -1161,9 +1202,8 @@
     call mpas_f_to_c_string(fname, c_fname)
 
     call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                      wordsize,istatus)
+                      scalefactor,wordsize,istatus)
     call init_atm_check_read_error(istatus,fname)
-    rarray(:,:,:) = rarray(:,:,:) * scalefactor
     vegfra(-2:1250,-2:1253,1:12) = rarray(1:1253,1:1256,1:12)
 
     write(fname,'(a,i5.5,a1,i5.5,a1,i5.5,a1,i5.5)') trim(geog_data_path)// &
@@ -1172,9 +1212,8 @@
     call mpas_f_to_c_string(fname, c_fname)
 
     call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                      wordsize,istatus)
+                      scalefactor,wordsize,istatus)
     call init_atm_check_read_error(istatus,fname)
-    rarray(:,:,:) = rarray(:,:,:) * scalefactor
     vegfra(1251:2503,-2:1253,1:12) = rarray(4:1256,1:1256,1:12)
 
     do iCell = 1,nCells
@@ -1261,9 +1300,8 @@
           call mpas_f_to_c_string(fname, c_fname)
 
           call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                            wordsize,istatus)
+                            scalefactor,wordsize,istatus)
           call init_atm_check_read_error(istatus, fname)
-          rarray(:,:,:) = rarray(:,:,:) * scalefactor
 
           iPoint = 1
           do j=supersample_fac * 3 + 1, supersample_fac * (ny-3)
@@ -1301,7 +1339,7 @@
                 xPixel = sphere_radius * cos(lon_pt) * cos(lat_pt)    ! at this point, so we need to ues the same radius
                 yPixel = sphere_radius * sin(lon_pt) * cos(lat_pt)    ! for source pixel coordinates
 
-                if (mpas_in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
+                if (in_cell(xPixel, yPixel, zPixel, xCell(iPoint), yCell(iPoint), zCell(iPoint), &
                             nEdgesOnCell(iPoint), verticesOnCell(:,iPoint), xVertex, yVertex, zVertex)) then
                    do k=1,nz
                       if (rarray(ii,jj,k) == msgval) then
@@ -1364,9 +1402,8 @@
     call mpas_f_to_c_string(fname, c_fname)
 
     call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                      wordsize, istatus)
+                      scalefactor, wordsize, istatus)
     call init_atm_check_read_error(istatus,fname)
-    rarray(:,:,:) = rarray(:,:,:) * scalefactor
     vegfra(-2:1250,-2:1253,1:12) = rarray(1:1253,1:1256,1:12)
 
     write(fname,'(a,i5.5,a1,i5.5,a1,i5.5,a1,i5.5)') trim(geog_data_path)// &
@@ -1375,9 +1412,8 @@
     call mpas_f_to_c_string(fname, c_fname)
 
     call read_geogrid(c_fname,rarray_ptr,nx,ny,nz,isigned,endian, &
-                      wordsize,istatus)
+                      scalefactor,wordsize,istatus)
     call init_atm_check_read_error(istatus,fname)
-    rarray(:,:,:) = rarray(:,:,:) * scalefactor
     vegfra(1251:2503,-2:1253,1:12) = rarray(4:1256,1:1256,1:12)
 
     do iCell = 1,nCells
@@ -1502,6 +1538,147 @@
  end function sphere_distance
 
 
+!-----------------------------------------------------------------------
+!  routine mirror_point
+!
+!> \brief Finds the "mirror" of a point about a great-circle arc
+!> \author Michael Duda
+!> \date   7 March 2019
+!> \details
+!>  Given the endpoints of a great-circle arc (A,B) and a point, computes
+!>  the location of the point on the opposite side of the arc along a great-
+!>  circle arc that intersects (A,B) at a right angle, and such that the arc
+!>  between the point and its mirror is bisected by (A,B).
+!>
+!>  Assumptions: A, B, and the point to be reflected all lie on the surface
+!>  of the unit sphere.
+!
+!-----------------------------------------------------------------------
+subroutine mirror_point(xPoint, yPoint, zPoint, xA, yA, zA, xB, yB, zB, xMirror, yMirror, zMirror)
+
+   implicit none
+
+   real(kind=RKIND), intent(in) :: xPoint, yPoint, zPoint
+   real(kind=RKIND), intent(in) :: xA, yA, zA
+   real(kind=RKIND), intent(in) :: xB, yB, zB
+   real(kind=RKIND), intent(out) :: xMirror, yMirror, zMirror
+
+   real(kind=RKIND) :: alpha
+
+   !
+   ! Find the spherical angle between arcs AP and AB (where P is the point to be reflected)
+   !
+   alpha = sphere_angle(xA, yA, zA, xPoint, yPoint, zPoint, xB, yB, zB)
+
+   !
+   ! Rotate the point to be reflected by twice alpha about the vector from the origin to A
+   !
+   call rotate_about_vector(xPoint, yPoint, zPoint, 2.0_RKIND * alpha, 0.0_RKIND, 0.0_RKIND, 0.0_RKIND, &
+                            xA, yA, zA, xMirror, yMirror, zMirror)
+
+end subroutine mirror_point
+
+
+!-----------------------------------------------------------------------
+!  routine rotate_about_vector
+!
+!> \brief Rotates a point about a vector in R3
+!> \author Michael Duda
+!> \date   7 March 2019
+!> \details
+!>  Rotates the point (x,y,z) through an angle theta about the vector
+!>  originating at (a, b, c) and having direction (u, v, w).
+!
+!>  Reference: https://sites.google.com/site/glennmurray/Home/rotation-matrices-and-formulas/rotation-about-an-arbitrary-axis-in-3-dimensions
+!
+!-----------------------------------------------------------------------
+subroutine rotate_about_vector(x, y, z, theta, a, b, c, u, v, w, xp, yp, zp)
+
+   implicit none
+
+   real (kind=RKIND), intent(in) :: x, y, z, theta, a, b, c, u, v, w
+   real (kind=RKIND), intent(out) :: xp, yp, zp
+
+   real (kind=RKIND) :: vw2, uw2, uv2
+   real (kind=RKIND) :: m
+
+   vw2 = v**2.0 + w**2.0
+   uw2 = u**2.0 + w**2.0
+   uv2 = u**2.0 + v**2.0
+   m = sqrt(u**2.0 + v**2.0 + w**2.0)
+
+   xp = (a*vw2 + u*(-b*v-c*w+u*x+v*y+w*z) + ((x-a)*vw2+u*(b*v+c*w-v*y-w*z))*cos(theta) + m*(-c*v+b*w-w*y+v*z)*sin(theta))/m**2.0
+   yp = (b*uw2 + v*(-a*u-c*w+u*x+v*y+w*z) + ((y-b)*uw2+v*(a*u+c*w-u*x-w*z))*cos(theta) + m*( c*u-a*w+w*x-u*z)*sin(theta))/m**2.0
+   zp = (c*uv2 + w*(-a*u-b*v+u*x+v*y+w*z) + ((z-c)*uv2+w*(a*u+b*v-u*x-v*y))*cos(theta) + m*(-b*u+a*v-v*x+u*y)*sin(theta))/m**2.0
+
+end subroutine rotate_about_vector
+
+
+!-----------------------------------------------------------------------
+!  routine in_cell
+!
+!> \brief Determines whether a point is within a Voronoi cell
+!> \author Michael Duda
+!> \date   7 March 2019
+!> \details
+!>  Given a point on the surface of the sphere, the corner points of a Voronoi
+!>  cell, and the generating point for that Voronoi cell, determines whether
+!>  the given point is within the Voronoi cell.
+!
+!-----------------------------------------------------------------------
+logical function in_cell(xPoint, yPoint, zPoint, xCell, yCell, zCell, &
+                         nEdgesOnCell, verticesOnCell, xVertex, yVertex, zVertex)
+
+   use mpas_geometry_utils, only : mpas_arc_length
+
+   implicit none
+
+   real(kind=RKIND), intent(in) :: xPoint, yPoint, zPoint
+   real(kind=RKIND), intent(in) :: xCell, yCell, zCell
+   integer, intent(in) :: nEdgesOnCell
+   integer, dimension(:), intent(in) :: verticesOnCell
+   real(kind=RKIND), dimension(:), intent(in) :: xVertex, yVertex, zVertex
+
+   integer :: i
+   integer :: vtx1, vtx2
+   real(kind=RKIND) :: xNeighbor, yNeighbor, zNeighbor
+   real(kind=RKIND) :: inDist, outDist
+   real(kind=RKIND) :: radius
+   real(kind=RKIND) :: radius_inv
+
+   radius = sqrt(xCell * xCell + yCell * yCell + zCell * zCell)
+   radius_inv = 1.0_RKIND / radius
+
+   inDist = mpas_arc_length(xPoint, yPoint, zPoint, xCell, yCell, zCell)
+
+   in_cell = .true.
+
+   do i=1,nEdgesOnCell
+      vtx1 = verticesOnCell(i)
+      vtx2 = verticesOnCell(mod(i,nEdgesOnCell)+1)
+
+      call mirror_point(xCell*radius_inv, yCell*radius_inv, zCell*radius_inv, &
+                        xVertex(vtx1)*radius_inv, yVertex(vtx1)*radius_inv, zVertex(vtx1)*radius_inv, &
+                        xVertex(vtx2)*radius_inv, yVertex(vtx2)*radius_inv, zVertex(vtx2)*radius_inv, &
+                        xNeighbor, yNeighbor, zNeighbor)
+
+      xNeighbor = xNeighbor * radius
+      yNeighbor = yNeighbor * radius
+      zNeighbor = zNeighbor * radius
+
+      outDist = mpas_arc_length(xPoint, yPoint, zPoint, xNeighbor, yNeighbor, zNeighbor)
+
+      if (outDist < inDist) then
+         in_cell = .false.
+         return
+      end if
+
+   end do
+
+end function in_cell
+
+
+>>>>>>> isolevels
 !==================================================================================================
  end module mpas_init_atm_static
 !==================================================================================================
