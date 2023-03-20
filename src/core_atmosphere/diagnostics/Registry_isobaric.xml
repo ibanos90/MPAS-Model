@@ -3,11 +3,14 @@
 <!-- ******************************* -->
 
 <dims>
-        <dim name="nIsoLevelsT"         definition="5"
+        <dim name="nIsoLevelsT"         definition="27"
              description="Number of isobaric levels to which temperature will be vertically interpolated"/>
 
-        <dim name="nIsoLevelsZ"         definition="13"
+        <dim name="nIsoLevelsZ"         definition="27"
              description="Number of isobaric levels to which height will be vertically interpolated"/>
+
+        <dim name="nIsoLevelsU"         definition="27"
+             description="Isobaric levels to which winds will be vertically interpolated"/>
 </dims>
 
 
@@ -217,10 +220,22 @@
         <var name="meanT_500_300"    type="real" dimensions="nCells Time" units="K"
              description="Mean temperature in the 300 hPa - 500 hPa layer"/>
 
-        <var name="t_iso_levels" type="real" dimensions="nIsoLevelsT" units="Pa"
+        <var name="t_iso_levels"     type="real" dimensions="nIsoLevelsT" units="Pa"
              description="Levels for vertical interpolation of temperature to isobaric surfaces"/>
 
-        <var name="z_iso_levels" type="real" dimensions="nIsoLevelsZ" units="Pa"
+        <var name="z_iso_levels"     type="real" dimensions="nIsoLevelsZ" units="Pa"
              description="Levels for vertical interpolation of height to isobaric surfaces"/>
 
+        <var name="uzonal_isobaric"  type="real" dimensions="nIsoLevelsU nCells Time" units="m s^{-1}"
+             description="Zonal wind interpolated to isobaric surfaces defined in u_iso_levels"/>
+
+        <var name="umeridional_isobaric" type="real" dimensions="nIsoLevelsU nCells Time" units="m s^{-1}"
+             description="Meridional wind interpolated to isobaric surfaces defined in u_iso_levels"/>
+
+<!--        <var name="ivtu" type="real" dimensions="nCells Time" units="kg m^{-1}"
+             description="zonal component of integrated vapor transport"/>
+
+        <var name="ivtv" type="real" dimensions="nCells Time" units="kg m^{-1}"
+             description="meridional component of integrated vapor transport"/>
+-->
 </var_struct>
