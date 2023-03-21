@@ -232,10 +232,16 @@
         <var name="umeridional_isobaric" type="real" dimensions="nIsoLevelsU nCells Time" units="m s^{-1}"
              description="Meridional wind interpolated to isobaric surfaces defined in u_iso_levels"/>
 
-<!--        <var name="ivtu" type="real" dimensions="nCells Time" units="kg m^{-1}"
+        <var name="ivtu" type="real" dimensions="nCells Time" units="kg m^{-1}"
              description="zonal component of integrated vapor transport"/>
 
         <var name="ivtv" type="real" dimensions="nCells Time" units="kg m^{-1}"
              description="meridional component of integrated vapor transport"/>
--->
+
+        <var name="rh_isobaric"       type="real" dimensions="t_iso_levels nCells Time" units="%"
+             description="Relative humidity interpolated to isobaric surfaces defined in t_iso_levels"/>
+
+        <var name="qv_isobaric"       type="real" dimensions="t_iso_levels nCells Time" units="kg kg^{-1}"
+             description="Water vapor mixing ratio interpolated to isobaric surfaces defined in t_iso_levels"/>
+
 </var_struct>
