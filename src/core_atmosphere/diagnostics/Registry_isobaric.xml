@@ -3,10 +3,10 @@
 <!-- ******************************* -->
 
 <dims>
-        <dim name="nIsoLevelsT"         definition="5"
+        <dim name="nIsoLevelsT"         definition="27"
              description="Number of isobaric levels to which temperature will be vertically interpolated"/>
 
-        <dim name="nIsoLevelsZ"         definition="13"
+        <dim name="nIsoLevelsZ"         definition="27"
              description="Number of isobaric levels to which height will be vertically interpolated"/>
 </dims>
 
@@ -223,4 +223,9 @@
         <var name="z_iso_levels" type="real" dimensions="nIsoLevelsZ" units="Pa"
              description="Levels for vertical interpolation of height to isobaric surfaces"/>
 
+        <var name="ivtu" type="real" dimensions="nCells Time" units="kg m^{-1}"
+             description="zonal component of integrated vapor transport"/>
+
+        <var name="ivtv" type="real" dimensions="nCells Time" units="kg m^{-1}"
+             description="meridional component of integrated vapor transport"/>
 </var_struct>

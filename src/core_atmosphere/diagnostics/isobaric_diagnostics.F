@@ -36,7 +36,8 @@ module isobaric_diagnostics
                need_vorticity_50, need_vorticity_100, need_vorticity_200, need_vorticity_250, need_vorticity_500, need_vorticity_700, need_vorticity_850, need_vorticity_925, &
                need_t_isobaric, need_z_isobaric, need_meanT_500_300
     logical :: need_temp, need_relhum, need_dewpoint, need_w, need_uzonal, need_umeridional, need_vorticity, need_height
-
+    !!! IHB from !!!Added by RRB for TAHPEX: integrated vapor transport !!!
+    logical :: need_ivtu, need_ivtv
 
     contains
 
@@ -301,6 +302,10 @@ module isobaric_diagnostics
         need_any_diags = need_any_diags .or. need_z_isobaric
         need_meanT_500_300 = MPAS_field_will_be_written('meanT_500_300')
         need_any_diags = need_any_diags .or. need_meanT_500_300
+        need_ivtu = MPAS_field_will_be_written('ivtu')
+        need_any_diags = need_any_diags .or. need_ivtu
+        need_ivtv = MPAS_field_will_be_written('ivtv')
+        need_any_diags = need_any_diags .or. need_ivtv
 
         if (need_any_diags) then
             call interp_diagnostics(mesh, state, 1, diag)
@@ -334,7 +339,7 @@ module isobaric_diagnostics
         real (kind=RKIND), dimension(:,:), pointer :: kiteAreasOnVertex
         
         real (kind=RKIND), dimension(:,:), pointer :: exner, height
-        real (kind=RKIND), dimension(:,:), pointer :: pressure_b, pressure_p 
+        real (kind=RKIND), dimension(:,:), pointer :: pressure_b, pressure_p, rho
         real (kind=RKIND), dimension(:,:), pointer :: relhum, theta_m, vorticity
         real (kind=RKIND), dimension(:,:), pointer :: umeridional, uzonal, vvel
         real (kind=RKIND), dimension(:,:,:), pointer :: scalars
@@ -422,7 +427,9 @@ module isobaric_diagnostics
        !--------------------
        
         real (kind=RKIND), dimension(:), pointer :: mslp
-       
+        !----Added by RRB for TAHPEX: integrated vapor transport----!
+        real (kind=RKIND), dimension(:), pointer :: ivtu, ivtv
+
         real (kind=RKIND), dimension(:,:), allocatable :: pressure, pressureCp1, pressure2, pressure_v, temperature
         real (kind=RKIND), dimension(:,:), allocatable :: dewpoint
        
@@ -548,7 +555,10 @@ module isobaric_diagnostics
         call mpas_pool_get_array(diag, 'vorticity_925hPa', vorticity_925hPa)
        
         call mpas_pool_get_array(diag, 'mslp', mslp)
-       
+
+        call mpas_pool_get_array(diag, 'ivtu', ivtu)
+        call mpas_pool_get_array(diag, 'ivtv', ivtv)
+
         if(.not.allocated(pressure)    ) allocate(pressure(nVertLevels,nCells)      )
         if(.not.allocated(pressureCp1) ) allocate(pressureCp1(nVertLevels,nCells+1) )
         if(.not.allocated(pressure2)   ) allocate(pressure2(nVertLevelsP1,nCells)   )
@@ -557,29 +567,23 @@ module isobaric_diagnostics
         if(.not.allocated(dewpoint) ) allocate(dewpoint(nVertLevels,nCells)   )
        
         if (need_t_isobaric) then
-            t_iso_levels(1) = 30000.0
-            t_iso_levels(2) = 35000.0
-            t_iso_levels(3) = 40000.0
-            t_iso_levels(4) = 45000.0
-            t_iso_levels(5) = 50000.0
+           t_iso_levels(:) = (/10000.0, 12500.0, 15000.0, 17500.0, &
+                               20000.0, 22500.0, 25000.0, &
+                               30000.0, 35000.0, &
+                               40000.0, 45000.0, &
+                               50000.0, 55000.0, &
+                               60000.0, 65000.0, &
+                               70000.0, 75000.0, 77500.0, &
+                               80000.0, 82500.0, 85000.0, 87500.0, &
+                               90000.0, 92500.0, 95000.0, 97500.0, 100000.0/)
+            nIsoLevelsT = size(t_iso_levels)
         end if
-       
+
         if (need_z_isobaric) then
-            z_iso_levels(1)  = 30000.0
-            z_iso_levels(2)  = 35000.0
-            z_iso_levels(3)  = 40000.0
-            z_iso_levels(4)  = 45000.0
-            z_iso_levels(5)  = 50000.0
-            z_iso_levels(6)  = 55000.0
-            z_iso_levels(7)  = 60000.0
-            z_iso_levels(8)  = 65000.0
-            z_iso_levels(9)  = 70000.0
-            z_iso_levels(10) = 75000.0
-            z_iso_levels(11) = 80000.0
-            z_iso_levels(12) = 85000.0
-            z_iso_levels(13) = 90000.0
-       end if
-       
+            z_iso_levels = t_iso_levels
+            nIsoLevelsZ = size(z_iso_levels)
+        end if
+
        !calculation of total pressure at cell centers (at mass points):
         do iCell = 1, nCells
         do k = 1, nVertLevels
@@ -898,8 +902,19 @@ module isobaric_diagnostics
             !   mslp(iCell) = mslp(iCell)/100.
             !enddo
         end if
-    
-    
+
+        !----Added by RRB for TAHPEX: integrated vapor transport----!
+        if (need_ivtu .or. need_ivtv) then
+          ivtu(:) = 0.0_RKIND
+          ivtv(:) = 0.0_RKIND
+          do iCell=1,nCellsSolve
+            do k=1,nVertLevels
+              ivtu(iCell) = ivtu(iCell)+( scalars(index_qv,k,iCell)*uzonal(k,iCell)*rho(k,iCell)*( height(k+1,iCell)-height(k,iCell) ) )
+              ivtv(iCell) = ivtv(iCell)+( scalars(index_qv,k,iCell)*umeridional(k,iCell)*rho(k,iCell)*( height(k+1,iCell)-height(k,iCell) ) )
+            end do
+          end do
+        end if
+
         !!!!!!!!!!! Additional temperature levels for vortex tracking !!!!!!!!!!!
         if (need_t_isobaric .or. need_meanT_500_300) then
      
