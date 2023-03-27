@@ -475,7 +475,9 @@ module isobaric_diagnostics
         call mpas_pool_get_array(diag, 'uReconstructMeridional', umeridional)
         call mpas_pool_get_array(diag, 'uReconstructZonal', uzonal)
         call mpas_pool_get_array(diag, 'relhum', relhum)
-       
+
+        call mpas_pool_get_array(diag, 'rho', rho)
+
         call mpas_pool_get_array(diag, 't_iso_levels', t_iso_levels)
         call mpas_pool_get_array(diag, 'z_iso_levels', z_iso_levels)
         call mpas_pool_get_array(diag, 't_isobaric', t_isobaric)
@@ -907,7 +909,7 @@ module isobaric_diagnostics
         if (need_ivtu .or. need_ivtv) then
           ivtu(:) = 0.0_RKIND
           ivtv(:) = 0.0_RKIND
-          do iCell=1,nCellsSolve
+          do iCell=1,nCells
             do k=1,nVertLevels
               ivtu(iCell) = ivtu(iCell)+( scalars(index_qv,k,iCell)*uzonal(k,iCell)*rho(k,iCell)*( height(k+1,iCell)-height(k,iCell) ) )
               ivtv(iCell) = ivtv(iCell)+( scalars(index_qv,k,iCell)*umeridional(k,iCell)*rho(k,iCell)*( height(k+1,iCell)-height(k,iCell) ) )
