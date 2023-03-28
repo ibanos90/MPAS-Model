@@ -1100,6 +1100,8 @@
 			<var name="qv_isobaric"/>
 			<var name="ivtu"/>
 			<var name="ivtv"/>
+			<var name="uzonal_isobaric"/>
+			<var name="umeridional_isobaric"/>
                         <!-- End isobaric diagnostics defined in diagnostics/Registry_isobaric.xml -->
 
                         <!-- Begin convective diagnostics defined in diagnostics/Registry_convective.xml -->
