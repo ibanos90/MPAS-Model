@@ -223,11 +223,10 @@
         <var name="z_iso_levels" type="real" dimensions="nIsoLevelsZ" units="Pa"
              description="Levels for vertical interpolation of height to isobaric surfaces"/>
 
-        <var name="qv_isobaric"  type="real" dimensions="t_iso_levels nCells Time" units="kg kg^{-1}"
+        <var name="qv_isobaric"  type="real" dimensions="nIsoLevelsT nCells Time" units="kg kg^{-1}"
              description="Water vapor mixing ratio interpolated to isobaric surfaces defined in t_iso_levels"/>
 
-
-        <var name="rh_isobaric"  type="real" dimensions="t_iso_levels nCells Time" units="%"
+        <var name="rh_isobaric"  type="real" dimensions="nIsoLevelsT nCells Time" units="%"
              description="Relative humidity interpolated to isobaric surfaces defined in t_iso_levels"/>
 
         <var name="ivtu" type="real" dimensions="nCells Time" units="kg m^{-1}"
