@@ -34,7 +34,7 @@ module isobaric_diagnostics
                need_umeridional_50, need_umeridional_100, need_umeridional_200, need_umeridional_250, need_umeridional_500, need_umeridional_700, need_umeridional_850, need_umeridional_925, &
                need_w_50, need_w_100, need_w_200, need_w_250, need_w_500, need_w_700, need_w_850, need_w_925, &
                need_vorticity_50, need_vorticity_100, need_vorticity_200, need_vorticity_250, need_vorticity_500, need_vorticity_700, need_vorticity_850, need_vorticity_925, &
-               need_t_isobaric, need_z_isobaric, need_meanT_500_300
+               need_t_isobaric, need_z_isobaric, need_meanT_500_300, need_qv_isobaric, need_rh_isobaric
     logical :: need_temp, need_relhum, need_dewpoint, need_w, need_uzonal, need_umeridional, need_vorticity, need_height
     !!! IHB from !!!Added by RRB for TAHPEX: integrated vapor transport !!!
     logical :: need_ivtu, need_ivtv
@@ -306,6 +306,10 @@ module isobaric_diagnostics
         need_any_diags = need_any_diags .or. need_ivtu
         need_ivtv = MPAS_field_will_be_written('ivtv')
         need_any_diags = need_any_diags .or. need_ivtv
+        need_rh_isobaric = MPAS_field_will_be_written('rh_isobaric')
+        need_any_diags = need_any_diags .or. need_rh_isobaric
+        need_qv_isobaric = MPAS_field_will_be_written('qv_isobaric')
+        need_any_diags = need_any_diags .or. need_qv_isobaric
 
         if (need_any_diags) then
             call interp_diagnostics(mesh, state, 1, diag)
@@ -349,6 +353,8 @@ module isobaric_diagnostics
         real (kind=RKIND), dimension(:,:), pointer :: t_isobaric
         real (kind=RKIND), dimension(:,:), pointer :: z_isobaric
         real (kind=RKIND), dimension(:), pointer :: meanT_500_300
+        real (kind=RKIND), dimension(:,:), pointer :: qv_isobaric
+        real (kind=RKIND), dimension(:,:), pointer :: rh_isobaric
        
         real (kind=RKIND), dimension(:), pointer :: temperature_50hPa
         real (kind=RKIND), dimension(:), pointer :: temperature_100hPa
@@ -483,7 +489,9 @@ module isobaric_diagnostics
         call mpas_pool_get_array(diag, 't_isobaric', t_isobaric)
         call mpas_pool_get_array(diag, 'z_isobaric', z_isobaric)
         call mpas_pool_get_array(diag, 'meanT_500_300', meanT_500_300)
-       
+        call mpas_pool_get_array(diag, 'qv_isobaric', qv_isobaric)
+        call mpas_pool_get_array(diag, 'rh_isobaric', rh_isobaric)
+
         call mpas_pool_get_array(diag, 'temperature_50hPa', temperature_50hPa)
         call mpas_pool_get_array(diag, 'temperature_100hPa', temperature_100hPa)
         call mpas_pool_get_array(diag, 'temperature_200hPa', temperature_200hPa)
@@ -918,7 +926,7 @@ module isobaric_diagnostics
         end if
 
         !!!!!!!!!!! Additional temperature levels for vortex tracking !!!!!!!!!!!
-        if (need_t_isobaric .or. need_meanT_500_300) then
+        if (need_t_isobaric .or. need_meanT_500_300 .or. need_qv_isobaric .or. need_rh_isobaric) then
      
             allocate(field_in(nCells, nVertLevels))
             allocate(press_in(nCells, nVertLevels))
@@ -959,7 +967,37 @@ module isobaric_diagnostics
                 call compute_layer_mean(meanT_500_300, 50000.0_RKIND, 30000.0_RKIND, field_in, press_in)
             end if
      
-     
+            !!!!!!!!!!! Added by RRB: interpolate qv to isobaric levels !!!!!!!!!!!
+            if (need_qv_isobaric) then
+              do iCell=1,nCells
+              do k=1,nVertLevels
+                 kk = nVertLevels+1-k
+                 field_in(iCell,kk) = scalars(index_qv,k,iCell)
+              end do
+              end do
+
+              call interp_tofixed_pressure(nCells, nVertLevels, nIsoLevelsT, press_in, field_in, press_interp, field_interp)
+
+              do k=1,nIsoLevelsT
+                 qv_isobaric(k,1:nCells) = field_interp(1:nCells,k)
+              end do
+            end if
+
+            if (need_rh_isobaric) then
+              do iCell=1,nCells
+              do k=1,nVertLevels
+                 kk = nVertLevels+1-k
+                 field_in(iCell,kk) = relhum(k,iCell)
+              end do
+              end do
+
+              call interp_tofixed_pressure(nCells, nVertLevels, nIsoLevelsT, press_in, field_in, press_interp, field_interp)
+
+              do k=1,nIsoLevelsT
+                 rh_isobaric(k,1:nCells) = field_interp(1:nCells,k)
+              end do
+            end if
+
             deallocate(field_in)
             deallocate(field_interp)
             deallocate(press_in)

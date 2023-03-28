@@ -1096,6 +1096,8 @@
 			<var name="z_isobaric"/>
 			<var name="z_iso_levels"/>
 			<var name="meanT_500_300"/>
+			<var name="rh_isobaric"/>
+			<var name="qv_isobaric"/>
 			<var name="ivtu"/>
 			<var name="ivtv"/>
                         <!-- End isobaric diagnostics defined in diagnostics/Registry_isobaric.xml -->
