@@ -1,3 +1,9 @@
+Introduction
+====
+This is the MPAS-A model version used together with MPAS-JEDI 2.0.0. This MPAS-A
+version is based upon MPAS-v7 with modifications for data assimilation purposes.
+Future MPAS-JEDI releases will eventually use the official MPAS-A releases.
+
 MPAS-v7.0
 ====
 
